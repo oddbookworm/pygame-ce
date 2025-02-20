@@ -76,6 +76,11 @@ pgSurface_LockBy(pgSurfaceObject *surfobj, PyObject *lockobj)
     PyObject *ref;
     pgSurfaceObject *surf = (pgSurfaceObject *)surfobj;
 
+#if PY_VERSION_MINOR >= 13
+    printf("Locking surface mutex\n");
+    PyMutex_Lock(&surfobj->mutex);
+#endif
+
     if (surf->locklist == NULL) {
         surf->locklist = PyList_New(0);
         if (surf->locklist == NULL) {
@@ -118,6 +123,11 @@ pgSurface_UnlockBy(pgSurfaceObject *surfobj, PyObject *lockobj)
     int found = 0;
     int noerror = 1;
     int weakref_getref_result;
+
+#if PY_VERSION_MINOR >= 13
+    printf("Unlocking surface mutex\n");
+    PyMutex_Unlock(&surfobj->mutex);
+#endif
 
     if (surf->locklist != NULL) {
         PyObject *item, *ref;

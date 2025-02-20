@@ -320,8 +320,32 @@ typedef struct {
     PyObject *weakreflist;
     PyObject *locklist;
     PyObject *dependency;
+#if PY_MINOR_VERSION >= 13
+    PyMutex mutex;
+    int is_locked;
+#endif
 } pgSurfaceObject;
 #define pgSurface_AsSurface(x) (((pgSurfaceObject *)x)->surf)
+
+#if PY_MINOR_VERSION >= 13
+#define LOCK_pgSurfaceObject(pgSurfacePtr)                         \
+    if (((pgSurfaceObject *)pgSurfacePtr)->is_locked == 0) {       \
+        PyMutex_Lock(&(((pgSurfaceObject *)pgSurfacePtr)->mutex)); \
+        ((pgSurfaceObject *)pgSurfacePtr)->is_locked = 1;          \
+    }
+#else
+#define LOCK_pgSurfaceObject(pgSurfacePtr)
+#endif
+
+#if PY_MINOR_VERSION >= 13
+#define UNLOCK_pgSurfaceObject(pgSurfacePtr)                         \
+    if (((pgSurfaceObject *)pgSurfacePtr)->is_locked == 1) {         \
+        PyMutex_Unlock(&(((pgSurfaceObject *)pgSurfacePtr)->mutex)); \
+        ((pgSurfaceObject *)pgSurfacePtr)->is_locked = 0;            \
+    }
+#else
+#define UNLOCK_pgSurfaceObject(pgSurfacePtr)
+#endif
 
 #ifndef PYGAMEAPI_SURFACE_INTERNAL
 #define pgSurface_Type (*(PyTypeObject *)PYGAMEAPI_GET_SLOT(surface, 0))
@@ -616,6 +640,18 @@ PYGAMEAPI_EXTERN_SLOTS(geometry);
             return RAISE(pgExc_SDLError, "Surface is not initialized"); \
         }                                                               \
     }
+
+#ifdef Py_GIL_DISABLED
+#define DISABLE_GIL_SINGLE_INITIALIZATION(module, name)              \
+    if (PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) { \
+        Py_DECREF(module);                                           \
+        return NULL;                                                 \
+    }                                                                \
+    printf("%s was compiled wtih GIL disabled\n", name);
+#else
+#define DISABLE_GIL_SINGLE_INITIALIZATION(module, name) \
+    printf("%s was compiled with GIL enabled\n", name);
+#endif
 
 static PG_INLINE PyObject *
 pg_tuple_couple_from_values_int(int val1, int val2)

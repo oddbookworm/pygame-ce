@@ -392,6 +392,10 @@ surface_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         self->weakreflist = NULL;
         self->dependency = NULL;
         self->locklist = NULL;
+#if PY_VERSION_MINOR >= 13
+        self->mutex[0] = 0;
+        self->is_locked = 0;
+#endif
     }
     return (PyObject *)self;
 }
@@ -711,6 +715,8 @@ surface_init(pgSurfaceObject *self, PyObject *args, PyObject *kwds)
 static PyObject *
 surf_get_at(PyObject *self, PyObject *position)
 {
+    LOCK_pgSurfaceObject((pgSurfaceObject *)self);
+
     SDL_Surface *surf = pgSurface_AsSurface(self);
     Uint8 *pixels = NULL;
     int x, y;
@@ -721,25 +727,33 @@ surf_get_at(PyObject *self, PyObject *position)
     SURF_INIT_CHECK(surf)
 
     if (!pg_TwoIntsFromObj(position, &x, &y)) {
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
         return RAISE(PyExc_TypeError,
                      "position must be a sequence of two numbers");
     }
 
-    if (x < 0 || x >= surf->w || y < 0 || y >= surf->h)
+    if (x < 0 || x >= surf->w || y < 0 || y >= surf->h) {
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
         return RAISE(PyExc_IndexError, "pixel index out of range");
+    }
 
     PG_PixelFormat *format;
     SDL_Palette *palette;
     if (!PG_GetSurfaceDetails(surf, &format, &palette)) {
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
         return RAISE(pgExc_SDLError, SDL_GetError());
     }
     int bpp = PG_FORMAT_BytesPerPixel(format);
 
-    if (bpp < 1 || bpp > 4)
+    if (bpp < 1 || bpp > 4) {
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
         return RAISE(PyExc_RuntimeError, "invalid color depth for surface");
+    }
 
-    if (!pgSurface_Lock((pgSurfaceObject *)self))
+    if (!pgSurface_Lock((pgSurfaceObject *)self)) {
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
         return NULL;
+    }
 
     pixels = (Uint8 *)surf->pixels;
 
@@ -769,9 +783,12 @@ surf_get_at(PyObject *self, PyObject *position)
                        rgba + 3);
             break;
     }
-    if (!pgSurface_Unlock((pgSurfaceObject *)self))
+    if (!pgSurface_Unlock((pgSurfaceObject *)self)) {
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
         return NULL;
+    }
 
+    UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
     return pgColor_New(rgba);
 }
 
@@ -4173,6 +4190,9 @@ MODINIT_DEFINE(surface)
     if (module == NULL) {
         return NULL;
     }
+
+    DISABLE_GIL_SINGLE_INITIALIZATION(module, _module.m_name)
+
     if (pg_warn_simd_at_runtime_but_uncompiled() < 0) {
         Py_DECREF(module);
         return NULL;
