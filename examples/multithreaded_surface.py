@@ -10,11 +10,11 @@ pygame.init()
 print(f"{sys._is_gil_enabled() = }")
 
 WIDTH, HEIGHT = 100, 100
-NUM_THREADS = 100
+NUM_THREADS = 10
 surface = pygame.Surface((WIDTH, HEIGHT))
 surface.fill("black")
 
-LERP_OFFSET = 0.001
+LERP_OFFSET = 0.01
 
 
 def get_random_color() -> pygame.Color:

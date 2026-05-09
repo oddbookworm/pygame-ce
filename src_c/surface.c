@@ -103,6 +103,12 @@ surf_get_locked(PyObject *self, PyObject *args);
 static PyObject *
 surf_get_locks(PyObject *self, PyObject *args);
 static PyObject *
+surf_mutex_lock(PyObject *self, PyObject *args);
+static PyObject *
+surf_mutex_unlock(PyObject *self, PyObject *args);
+static PyObject *
+surf_mutex_is_locked(PyObject *self, PyObject *args);
+static PyObject *
 surf_get_palette(PyObject *self, PyObject *args);
 static PyObject *
 surf_get_palette_at(PyObject *self, PyObject *args);
@@ -253,6 +259,10 @@ static struct PyMethodDef surface_methods[] = {
     {"mustlock", surf_mustlock, METH_NOARGS, DOC_SURFACE_MUSTLOCK},
     {"get_locked", surf_get_locked, METH_NOARGS, DOC_SURFACE_GETLOCKED},
     {"get_locks", surf_get_locks, METH_NOARGS, DOC_SURFACE_GETLOCKS},
+
+    {"mutex_lock", surf_mutex_lock, METH_NOARGS, NULL},
+    {"mutex_unlock", surf_mutex_unlock, METH_NOARGS, NULL},
+    {"mutex_is_locked", surf_mutex_is_locked, METH_NOARGS, NULL},
 
     {"set_colorkey", (PyCFunction)surf_set_colorkey, METH_VARARGS,
      DOC_SURFACE_SETCOLORKEY},
@@ -915,15 +925,9 @@ surf_get_at(PyObject *self, PyObject *position)
 
     LOCK_pgSurfaceObject((pgSurfaceObject *)self);
     if (!pgSurface_Lock((pgSurfaceObject *)self)) {
-        if (PyErr_Occurred()) {
-            PyErr_Print();
-            PyErr_Clear();
-        }
+        PRINT_AND_CLEAR_EXCEPTION
         UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
-        if (PyErr_Occurred()) {
-            PyErr_Print();
-            PyErr_Clear();
-        }
+        PRINT_AND_CLEAR_EXCEPTION
         PyErr_SetString(pgExc_SDLError, "Failed to lock surface");
         return NULL;
     }
@@ -957,15 +961,9 @@ surf_get_at(PyObject *self, PyObject *position)
             break;
     }
     if (!pgSurface_Unlock((pgSurfaceObject *)self)) {
-        if (PyErr_Occurred()) {
-            PyErr_Print();
-            PyErr_Clear();
-        }
+        PRINT_AND_CLEAR_EXCEPTION
         UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
-        if (PyErr_Occurred()) {
-            PyErr_Print();
-            PyErr_Clear();
-        }
+        PRINT_AND_CLEAR_EXCEPTION
         PyErr_SetString(pgExc_SDLError, "Failed to unlock surface in get_at");
         return NULL;
     }
@@ -1026,15 +1024,9 @@ surf_set_at(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
 
     LOCK_pgSurfaceObject((pgSurfaceObject *)self);
     if (!pgSurface_Lock((pgSurfaceObject *)self)) {
-        if (PyErr_Occurred()) {
-            PyErr_Print();
-            PyErr_Clear();
-        }
+        PRINT_AND_CLEAR_EXCEPTION
         UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
-        if (PyErr_Occurred()) {
-            PyErr_Print();
-            PyErr_Clear();
-        }
+        PRINT_AND_CLEAR_EXCEPTION
         PyErr_SetString(pgExc_SDLError, "Failed to lock surface");
 
         return NULL;
@@ -1074,15 +1066,9 @@ surf_set_at(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     }
 
     if (!pgSurface_Unlock((pgSurfaceObject *)self)) {
-        if (PyErr_Occurred()) {
-            PyErr_Print();
-            PyErr_Clear();
-        }
+        PRINT_AND_CLEAR_EXCEPTION
         UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
-        if (PyErr_Occurred()) {
-            PyErr_Print();
-            PyErr_Clear();
-        }
+        PRINT_AND_CLEAR_EXCEPTION
         PyErr_SetString(pgExc_SDLError, "Failed to unlock surface in set_at");
         return NULL;
     }
@@ -1117,7 +1103,11 @@ surf_get_at_mapped(PyObject *self, PyObject *position)
         return RAISE(PyExc_RuntimeError, "invalid color depth for surface");
     }
 
+    LOCK_pgSurfaceObject((pgSurfaceObject *)self);
     if (!pgSurface_Lock((pgSurfaceObject *)self)) {
+        PRINT_AND_CLEAR_EXCEPTION
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
+        PRINT_AND_CLEAR_EXCEPTION
         return NULL;
     }
 
@@ -1143,9 +1133,13 @@ surf_get_at_mapped(PyObject *self, PyObject *position)
             break;
     }
     if (!pgSurface_Unlock((pgSurfaceObject *)self)) {
+        PRINT_AND_CLEAR_EXCEPTION
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
+        PRINT_AND_CLEAR_EXCEPTION
         return NULL;
     }
 
+    UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
     return PyLong_FromLong((long)color);
 }
 
@@ -1162,13 +1156,18 @@ surf_map_rgb(PyObject *self, PyObject *args)
 
     SURF_INIT_CHECK(surf)
 
+    LOCK_pgSurfaceObject((pgSurfaceObject *)self);
     PG_PixelFormat *format;
     SDL_Palette *palette;
     if (!PG_GetSurfaceDetails(surf, &format, &palette)) {
+        PRINT_AND_CLEAR_EXCEPTION
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
+        PRINT_AND_CLEAR_EXCEPTION
         return RAISE(pgExc_SDLError, SDL_GetError());
     }
 
     color = PG_MapRGBA(format, palette, rgba[0], rgba[1], rgba[2], rgba[3]);
+    UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
     return PyLong_FromLong(color);
 }
 
@@ -1186,9 +1185,13 @@ surf_unmap_rgb(PyObject *self, PyObject *arg)
     }
     SURF_INIT_CHECK(surf)
 
+    LOCK_pgSurfaceObject((pgSurfaceObject *)self);
     PG_PixelFormat *format;
     SDL_Palette *palette;
     if (!PG_GetSurfaceDetails(surf, &format, &palette)) {
+        PRINT_AND_CLEAR_EXCEPTION
+        UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
+        PRINT_AND_CLEAR_EXCEPTION
         return RAISE(pgExc_SDLError, SDL_GetError());
     }
 
@@ -1200,6 +1203,7 @@ surf_unmap_rgb(PyObject *self, PyObject *arg)
         rgba[3] = 255;
     }
 
+    UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
     return pgColor_New(rgba);
 }
 
@@ -1274,6 +1278,40 @@ surf_get_locks(PyObject *self, PyObject *_null)
         PyTuple_SetItem(tuple, i, tmp);
     }
     return tuple;
+}
+
+static PyObject *
+surf_mutex_lock(PyObject *self, PyObject *_null)
+{
+    SURF_INIT_CHECK(pgSurface_AsSurface(self));
+    if (IS_LOCKED((pgSurfaceObject *)self)) {
+        RAISE(pgExc_SDLError, "Cannot lock mutex that is already locked");
+    }
+
+    LOCK_pgSurfaceObject((pgSurfaceObject *)self);
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+surf_mutex_unlock(PyObject *self, PyObject *_null)
+{
+    SURF_INIT_CHECK(pgSurface_AsSurface(self));
+    if (!IS_LOCKED((pgSurfaceObject *)self)) {
+        RAISE(pgExc_SDLError, "Cannot unlock mutex that is not locked");
+    }
+
+    UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+surf_mutex_is_locked(PyObject *self, PyObject *_null)
+{
+    SURF_INIT_CHECK(pgSurface_AsSurface(self));
+    if (IS_LOCKED((pgSurfaceObject *)self)) {
+        Py_RETURN_TRUE;
+    }
+    Py_RETURN_FALSE;
 }
 
 static PyObject *
