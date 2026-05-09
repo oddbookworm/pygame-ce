@@ -23,7 +23,7 @@
 
 #define PYGAME_FREETYPE_INTERNAL
 #include "../_pygame.h"
-#include "../freetype.h"
+#include "ft_freetype.h"
 
 /**********************************************************
  * Internal module defines
@@ -200,7 +200,8 @@ typedef struct fontsurface_ {
     int item_stride;
     int pitch;
 
-    SDL_PixelFormat *format;
+    PG_PixelFormat *format;
+    SDL_Palette *palette;
 
     FontRenderPtr render_gray;
     FontRenderPtr render_mono;
@@ -215,7 +216,7 @@ typedef struct fontinternals_ {
 
 typedef struct PGFT_String_ {
     Py_ssize_t length;
-    PGFT_char data[1];
+    PGFT_char data[];
 } PGFT_String;
 
 #if defined(PGFT_DEBUG_CACHE)

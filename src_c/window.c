@@ -8,6 +8,10 @@
 #include "doc/sdl2_video_doc.h"
 #include "doc/window_doc.h"
 
+#if !SDL_VERSION_ATLEAST(3, 0, 0)
+#include <SDL_syswm.h>
+#endif
+
 static int is_window_mod_init = 0;
 
 #if !defined(__APPLE__)
@@ -126,8 +130,7 @@ get_grabbed_window(PyObject *self, PyObject *_null)
         if (!win_obj) {
             Py_RETURN_NONE;
         }
-        Py_INCREF(win_obj);
-        return win_obj;
+        return Py_NewRef(win_obj);
     }
     Py_RETURN_NONE;
 }
@@ -173,8 +176,7 @@ window_get_surface(pgWindowObject *self, PyObject *_null)
             return RAISE(pgExc_SDLError,
                          "display.set_mode has not been called yet.");
         }
-        Py_INCREF(surf);
-        return surf;
+        return Py_NewRef(surf);
     }
 
     _surf = SDL_GetWindowSurface(self->_win);
@@ -194,14 +196,13 @@ window_get_surface(pgWindowObject *self, PyObject *_null)
     }
     self->surf->surf = _surf;
 
-    Py_INCREF(self->surf);
-    return (PyObject *)self->surf;
+    return Py_NewRef(self->surf);
 }
 
 static PyObject *
 window_flip(pgWindowObject *self, PyObject *_null)
 {
-    int result;
+    bool success;
 
     if (self->context == NULL) {
         if (!self->surf) {
@@ -211,9 +212,9 @@ window_flip(pgWindowObject *self, PyObject *_null)
         }
 
         Py_BEGIN_ALLOW_THREADS;
-        result = SDL_UpdateWindowSurface(self->_win);
+        success = PG_UpdateWindowSurface(self->_win);
         Py_END_ALLOW_THREADS;
-        if (result) {
+        if (!success) {
             return RAISE(pgExc_SDLError, SDL_GetError());
         }
     }
@@ -301,9 +302,15 @@ _resize_event_watch(void *userdata, SDL_Event *event)
 static PyObject *
 window_set_windowed(pgWindowObject *self, PyObject *_null)
 {
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+    if (!SDL_SetWindowFullscreen(self->_win, 0)) {
+        return RAISE(pgExc_SDLError, SDL_GetError());
+    }
+#else
     if (SDL_SetWindowFullscreen(self->_win, 0)) {
         return RAISE(pgExc_SDLError, SDL_GetError());
     }
+#endif
     Py_RETURN_NONE;
 }
 
@@ -330,6 +337,10 @@ pg_window_set_fullscreen(SDL_Window *window, int desktop)
             SDL_SetError("Could not get fullscreen display mode");
             goto end;
         }
+    }
+
+    if (!SDL_SetWindowFullscreen(window, 1)) {
+        goto end;
     }
     if (!SDL_SetWindowFullscreenMode(window, chosen_mode)) {
         goto end;
@@ -367,7 +378,7 @@ window_set_fullscreen(pgWindowObject *self, PyObject *args, PyObject *kwargs)
 static PyObject *
 window_focus(pgWindowObject *self, PyObject *args, PyObject *kwargs)
 {
-    SDL_bool input_only = SDL_FALSE;
+    int input_only = SDL_FALSE;
     char *kwids[] = {"input_only", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|p", kwids, &input_only)) {
         return NULL;
@@ -469,7 +480,7 @@ window_set_modal_for(pgWindowObject *self, PyObject *arg)
         return RAISE(PyExc_TypeError,
                      "Argument to set_modal_for must be a Window.");
     }
-    if (!PG_SetWindowModalFor(self->_win, ((pgWindowObject *)arg)->_win)) {
+    if (PG_SetWindowModalFor(self->_win, ((pgWindowObject *)arg)->_win) < 0) {
         return RAISE(pgExc_SDLError, SDL_GetError());
     }
     Py_RETURN_NONE;
@@ -879,7 +890,12 @@ window_set_opacity(pgWindowObject *self, PyObject *arg, void *v)
     if (PyErr_Occurred()) {
         return -1;
     }
-    if (SDL_SetWindowOpacity(self->_win, opacity)) {
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+    if (!SDL_SetWindowOpacity(self->_win, opacity))
+#else
+    if (SDL_SetWindowOpacity(self->_win, opacity))
+#endif
+    {
         PyErr_SetString(pgExc_SDLError, SDL_GetError());
         return -1;
     }
@@ -911,9 +927,98 @@ window_get_opengl(pgWindowObject *self, void *v)
         hasGL = self->context != NULL;
     }
     else {
+        /* This is not a reliable way to test that OPENGL was requested by the
+         * user. SDL can implicitly create and use an opengl context in some
+         * platforms and in that case hasGL=1 even when the user didn't
+         * request for it. As borrowed windows are deprecated functionality we
+         * can ignore this issue. */
         hasGL = (SDL_GetWindowFlags(self->_win) & SDL_WINDOW_OPENGL) > 0;
     }
     return PyBool_FromLong(hasGL);
+}
+
+static PyObject *
+window_get_handle(pgWindowObject *self, void *v)
+{
+    SDL_Window *win = self->_win;
+    size_t handle = 0;
+
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+    const char *driver = SDL_GetCurrentVideoDriver();
+    if (driver == NULL) {
+        handle = 0;
+        return PyLong_FromSize_t(handle);
+    }
+
+    SDL_PropertiesID props = SDL_GetWindowProperties(win);
+
+    if (!strcmp(driver, "windows")) {
+        handle = (size_t)SDL_GetPointerProperty(
+            props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+    }
+    else if (!strcmp(driver, "x11")) {
+        handle = (size_t)SDL_GetNumberProperty(
+            props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    }
+    else if (!strcmp(driver, "cocoa")) {
+        handle = (size_t)SDL_GetPointerProperty(
+            props, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
+    }
+    else if (!strcmp(driver, "uikit")) {
+        handle = (size_t)SDL_GetPointerProperty(
+            props, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, NULL);
+    }
+    else if (!strcmp(driver, "android")) {
+        handle = (size_t)SDL_GetPointerProperty(
+            props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
+    }
+    else if (!strcmp(driver, "vivante")) {
+        handle = (size_t)SDL_GetPointerProperty(
+            props, SDL_PROP_WINDOW_VIVANTE_WINDOW_POINTER, NULL);
+    }
+
+#else  // sdl 2:
+    SDL_SysWMinfo info;
+
+    SDL_VERSION(&(info.version));
+
+    if (!SDL_GetWindowWMInfo(win, &info)) {
+        return PyLong_FromSize_t(0);
+    }
+
+#ifdef SDL_VIDEO_DRIVER_WINDOWS
+    if (info.subsystem == SDL_SYSWM_WINDOWS) {
+        handle = (size_t)info.info.win.window;
+    }
+#endif  // WINDOWS
+#ifdef SDL_VIDEO_DRIVER_X11
+    if (info.subsystem == SDL_SYSWM_X11) {
+        handle = (size_t)info.info.x11.window;
+    }
+#endif  // X11
+#ifdef SDL_VIDEO_DRIVER_COCOA
+    if (info.subsystem == SDL_SYSWM_COCOA) {
+        handle = (size_t)info.info.cocoa.window;
+    }
+#endif  // COCOA
+#ifdef SDL_VIDEO_DRIVER_UIKIT
+    if (info.subsystem == SDL_SYSWM_UIKIT) {
+        handle = (size_t)info.info.uikit.window;
+    }
+#endif  // UIKIT
+#ifdef SDL_VIDEO_DRIVER_ANDROID
+    if (info.subsystem == SDL_SYSWM_ANDROID) {
+        handle = (size_t)info.info.android.window;
+    }
+#endif  // ANDROID
+#ifdef SDL_VIDEO_DRIVER_VIVANTE
+    if (info.subsystem == SDL_SYSWM_VIVANTE) {
+        handle = (size_t)info.info.vivante.window;
+    }
+#endif  // VIVANTE
+#endif  // sdl 3
+
+    return PyLong_FromSize_t(handle);
 }
 
 static PyObject *
@@ -1287,8 +1392,7 @@ window_from_display_module(PyTypeObject *cls, PyObject *_null)
 
     pgWindowObject *self = (pgWindowObject *)pg_get_pg_window(window);
     if (self != NULL) {
-        Py_INCREF(self);
-        return (PyObject *)self;
+        return Py_NewRef(self);
     }
 
     self = (pgWindowObject *)(cls->tp_new(cls, NULL, NULL));
@@ -1428,6 +1532,7 @@ static PyGetSetDef _window_getset[] = {
      DOC_WINDOW_OPACITY, NULL},
     {"id", (getter)window_get_window_id, NULL, DOC_WINDOW_ID, NULL},
     {"opengl", (getter)window_get_opengl, NULL, DOC_WINDOW_OPENGL, NULL},
+    {"handle", (getter)window_get_handle, NULL, DOC_WINDOW_HANDLE, NULL},
     {"utility", (getter)window_get_utility, NULL, DOC_WINDOW_UTILITY, NULL},
     {NULL, 0, NULL, NULL, NULL} /* Sentinel */
 };

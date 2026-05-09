@@ -181,6 +181,9 @@ _color_int(pgColorObject *);
 static PyObject *
 _color_float(pgColorObject *);
 
+static PyObject *
+_color_bytes(pgColorObject *);
+
 /* Sequence protocol methods */
 static Py_ssize_t
 _color_length(pgColorObject *);
@@ -256,6 +259,17 @@ static PyMethodDef _color_methods[] = {
     {"premul_alpha", (PyCFunction)_premul_alpha, METH_NOARGS,
      DOC_COLOR_PREMULALPHA},
     {"update", (PyCFunction)_color_update, METH_FASTCALL, DOC_COLOR_UPDATE},
+
+    /**
+     * While object.__bytes__(self) is listed in the Data Model reference (see:
+     * https://docs.python.org/3/reference/datamodel.html#object.__bytes__) it
+     * does not appear to have a PyTypeObject struct analog (see:
+     * https://docs.python.org/3/c-api/typeobj.html), so we declare it for the
+     * type as any other custom method.
+     */
+    {"__bytes__", (PyCFunction)_color_bytes, METH_NOARGS,
+     "Get a byte representation of the color"},
+
     {NULL, NULL, 0, NULL}};
 
 /**
@@ -1611,8 +1625,7 @@ _color_add(PyObject *obj1, PyObject *obj2)
     pgColorObject *color1 = (pgColorObject *)obj1;
     pgColorObject *color2 = (pgColorObject *)obj2;
     if (!pgColor_Check(obj1) || !pgColor_Check(obj2)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        return Py_NewRef(Py_NotImplemented);
     }
     rgba[0] = MIN(color1->data[0] + color2->data[0], 255);
     rgba[1] = MIN(color1->data[1] + color2->data[1], 255);
@@ -1631,8 +1644,7 @@ _color_sub(PyObject *obj1, PyObject *obj2)
     pgColorObject *color1 = (pgColorObject *)obj1;
     pgColorObject *color2 = (pgColorObject *)obj2;
     if (!pgColor_Check(obj1) || !pgColor_Check(obj2)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        return Py_NewRef(Py_NotImplemented);
     }
     rgba[0] = MAX(color1->data[0] - color2->data[0], 0);
     rgba[1] = MAX(color1->data[1] - color2->data[1], 0);
@@ -1651,8 +1663,7 @@ _color_mul(PyObject *obj1, PyObject *obj2)
     pgColorObject *color1 = (pgColorObject *)obj1;
     pgColorObject *color2 = (pgColorObject *)obj2;
     if (!pgColor_Check(obj1) || !pgColor_Check(obj2)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        return Py_NewRef(Py_NotImplemented);
     }
     rgba[0] = MIN(color1->data[0] * color2->data[0], 255);
     rgba[1] = MIN(color1->data[1] * color2->data[1], 255);
@@ -1671,8 +1682,7 @@ _color_div(PyObject *obj1, PyObject *obj2)
     pgColorObject *color1 = (pgColorObject *)obj1;
     pgColorObject *color2 = (pgColorObject *)obj2;
     if (!pgColor_Check(obj1) || !pgColor_Check(obj2)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        return Py_NewRef(Py_NotImplemented);
     }
     if (color2->data[0] != 0) {
         rgba[0] = color1->data[0] / color2->data[0];
@@ -1699,8 +1709,7 @@ _color_mod(PyObject *obj1, PyObject *obj2)
     pgColorObject *color1 = (pgColorObject *)obj1;
     pgColorObject *color2 = (pgColorObject *)obj2;
     if (!pgColor_Check(obj1) || !pgColor_Check(obj2)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        return Py_NewRef(Py_NotImplemented);
     }
     if (color2->data[0] != 0) {
         rgba[0] = color1->data[0] % color2->data[0];
@@ -1751,6 +1760,15 @@ _color_float(pgColorObject *color)
     Uint32 tmp = (((Uint32)color->data[0] << 24) + (color->data[1] << 16) +
                   (color->data[2] << 8) + color->data[3]);
     return PyFloat_FromDouble((double)tmp);
+}
+
+/**
+ * bytes(color)
+ */
+static PyObject *
+_color_bytes(pgColorObject *color)
+{
+    return PyBytes_FromStringAndSize((char *)color->data, 4);
 }
 
 /* Sequence protocol methods */
@@ -2076,8 +2094,7 @@ _color_richcompare(PyObject *o1, PyObject *o2, int opid)
     }
 
 Unimplemented:
-    Py_INCREF(Py_NotImplemented);
-    return Py_NotImplemented;
+    return Py_NewRef(Py_NotImplemented);
 }
 
 static int
@@ -2115,8 +2132,7 @@ _color_getbuffer(pgColorObject *color, Py_buffer *view, int flags)
         view->strides = 0;
     }
     view->suboffsets = 0;
-    Py_INCREF(color);
-    view->obj = (PyObject *)color;
+    view->obj = Py_NewRef(color);
     return 0;
 }
 

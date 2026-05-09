@@ -192,8 +192,7 @@ def circle(
     :param bool draw_bottom_right: (optional) if this is set to True then the bottom right corner
         of the circle will be drawn
 
-            | if any of the draw_circle_part is True then it will draw all circle parts that have the True
-            | value, otherwise it will draw the entire circle.
+            | If any quadrants are set to True, only they will be drawn, otherwise the entire circle will be drawn.
 
     :returns: a rect bounding the changed pixels, if nothing is drawn the
         bounding rect's position will be the ``center`` parameter value (float
@@ -211,15 +210,6 @@ def circle(
     .. versionchangedold:: 2.0.0.dev8 Added support for drawing circle quadrants.
     """
 
-@overload
-def aacircle(
-    surface: Surface,
-    color: ColorLike,
-    center: Point,
-    radius: float,
-    width: int = 0,
-) -> Rect: ...
-@overload
 def aacircle(
     surface: Surface,
     color: ColorLike,
@@ -230,13 +220,12 @@ def aacircle(
     draw_top_left: bool = False,
     draw_bottom_left: bool = False,
     draw_bottom_right: bool = False,
-) -> Rect: ...
-def aacircle(*args, **kwargs):  # type: ignore
+) -> Rect:
     """Draw an antialiased circle.
 
     Draws an antialiased circle on the given surface.
     Uses Xiaolin Wu Circle Algorithm.
-    adapted from: https://cgg.mff.cuni.cz/~pepca/ref/WU.pdf
+    Adapted from: https://cgg.mff.cuni.cz/~pepca/ref/WU.pdf
 
     :param Surface surface: surface to draw on
     :param color: color to draw with, the alpha value is optional if using a
@@ -269,8 +258,7 @@ def aacircle(*args, **kwargs):  # type: ignore
     :param bool draw_bottom_right: (optional) if this is set to True then the bottom right corner
         of the circle will be drawn
 
-            | if any of the draw_circle_part is True then it will draw all circle parts that have the True
-            | value, otherwise it will draw the entire circle.
+            | If any quadrants are set to True, only they will be drawn, otherwise the entire circle will be drawn.
 
     :returns: a rect bounding the changed pixels, if nothing is drawn the
         bounding rect's position will be the ``center`` parameter value (float
@@ -508,7 +496,7 @@ def aaline(
     :param int width: (optional) used for line thickness
 
             | if width >= 1, used for line thickness (default is 1)
-            | if width < 1, nothing will be drawn
+            | if width < 1, a line of width == 1 will be drawn
 
     :returns: a rect bounding the changed pixels, if nothing is drawn the
         bounding rect's position will be the ``start_pos`` parameter value (float
@@ -521,8 +509,9 @@ def aaline(
     .. versionchangedold:: 2.0.0 Added support for keyword arguments.
     .. versionchanged:: 2.4.0 Removed deprecated 'blend' argument
     .. versionchanged:: 2.5.0 ``blend`` argument re-added for backcompat, but will
-        always raise a deprecation exception when used
-    .. versionchanged:: 2.5.3 Added line width
+        do nothing different and always raise a deprecation exception when used.
+    .. versionchanged:: 2.5.6 Added ``width`` in place of the deprecated
+        ``blend`` argument in a way that doesn't break backcompat too much.
     """
 
 def aalines(
@@ -566,4 +555,27 @@ def aalines(
     .. versionchanged:: 2.4.0 Removed deprecated ``blend`` argument
     .. versionchanged:: 2.5.0 ``blend`` argument re-added for backcompat, but will
         always raise a deprecation exception when used
+    """
+
+def flood_fill(surface: Surface, color: ColorLike | Surface, start_pos: Point) -> Rect:
+    """Fill an enclosed, same color area, on a surface.
+
+    Replace the color of a cluster of connected same-color pixels, beginning
+    from the starting position, with a repeating pattern or solid single color.
+
+    :param Surface surface: surface to draw on
+    :param color: color, or surface pattern, to draw with. The alpha value is optional if using a
+       tuple ``(RGB[A])``
+    :type color: :data:`pygame.typing.ColorLike` or a pattern to fill with, as a Surface
+    :param start_pos: starting position as a sequence of 2 ints/floats,
+       e.g. ``(x, y)``
+    :type start_pos: tuple(int or float, int or float) or
+       list(int or float, int or float) or Vector2(int or float, int or float)
+
+    :returns: a rect bounding the changed pixels, if nothing is drawn the
+       bounding rect's position will be the position of the starting point
+       and its width and height will be 0
+    :rtype: Rect
+
+    .. versionadded:: 2.5.6
     """
