@@ -103,10 +103,6 @@ surf_get_locked(PyObject *self, PyObject *args);
 static PyObject *
 surf_get_locks(PyObject *self, PyObject *args);
 static PyObject *
-surf_mutex_lock(PyObject *self, PyObject *args);
-static PyObject *
-surf_mutex_unlock(PyObject *self, PyObject *args);
-static PyObject *
 surf_mutex_is_locked(PyObject *self, PyObject *args);
 static PyObject *
 surf_get_palette(PyObject *self, PyObject *args);
@@ -260,9 +256,8 @@ static struct PyMethodDef surface_methods[] = {
     {"get_locked", surf_get_locked, METH_NOARGS, DOC_SURFACE_GETLOCKED},
     {"get_locks", surf_get_locks, METH_NOARGS, DOC_SURFACE_GETLOCKS},
 
-    {"mutex_lock", surf_mutex_lock, METH_NOARGS, NULL},
-    {"mutex_unlock", surf_mutex_unlock, METH_NOARGS, NULL},
-    {"mutex_is_locked", surf_mutex_is_locked, METH_NOARGS, NULL},
+    {"mutex_is_locked", surf_mutex_is_locked, METH_NOARGS,
+     DOC_SURFACE_MUTEXISLOCKED},
 
     {"set_colorkey", (PyCFunction)surf_set_colorkey, METH_VARARGS,
      DOC_SURFACE_SETCOLORKEY},
@@ -1278,31 +1273,6 @@ surf_get_locks(PyObject *self, PyObject *_null)
         PyTuple_SetItem(tuple, i, tmp);
     }
     return tuple;
-}
-
-static PyObject *
-surf_mutex_lock(PyObject *self, PyObject *_null)
-{
-    SURF_INIT_CHECK(pgSurface_AsSurface(self));
-    if (IS_LOCKED((pgSurfaceObject *)self)) {
-        return RAISE(pgExc_SDLError,
-                     "Cannot lock mutex that is already locked");
-    }
-
-    LOCK_pgSurfaceObject((pgSurfaceObject *)self);
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-surf_mutex_unlock(PyObject *self, PyObject *_null)
-{
-    SURF_INIT_CHECK(pgSurface_AsSurface(self));
-    if (!IS_LOCKED((pgSurfaceObject *)self)) {
-        return RAISE(pgExc_SDLError, "Cannot unlock mutex that is not locked");
-    }
-
-    UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
-    Py_RETURN_NONE;
 }
 
 static PyObject *
