@@ -134,7 +134,6 @@ pg_audio_get_audio_device_channel_map(PyObject *module, PyObject *arg)
         }
         if (PyList_SetItem(channel_map_list, i, item) < 0) {
             SDL_free(channel_map);
-            Py_DECREF(item);
             Py_DECREF(channel_map_list);
             return NULL;
         }
@@ -799,7 +798,6 @@ pg_audio_get_drivers(PyObject *module, PyObject *_null)
             return NULL;
         }
         if (PyList_SetItem(driver_list, i, item) < 0) {
-            Py_DECREF(item);
             Py_DECREF(driver_list);
             return NULL;
         }
@@ -831,7 +829,6 @@ _pg_audio_device_array_to_pylist(SDL_AudioDeviceID *devices, int num_devices,
         }
         device->devid = devices[i];
         if (PyList_SetItem(device_list, i, (PyObject *)device) < 0) {
-            Py_DECREF(device);
             Py_DECREF(device_list);
             return NULL;
         }

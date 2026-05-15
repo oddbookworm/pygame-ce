@@ -120,7 +120,7 @@ static PyObject *
 math_clamp(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 
 /* generic helper functions */
-static int
+static bool
 RealNumber_Check(PyObject *obj);
 static double
 PySequence_GetItem_AsDouble(PyObject *seq, Py_ssize_t index);
@@ -369,13 +369,10 @@ vector_elementwise(pgVector *vec, PyObject *args);
  * Global helper functions
  ********************************/
 
-static int
+static bool
 RealNumber_Check(PyObject *obj)
 {
-    if (obj && PyNumber_Check(obj) && !PyComplex_Check(obj)) {
-        return 1;
-    }
-    return 0;
+    return obj && PyNumber_Check(obj) && !PyComplex_Check(obj);
 }
 
 static double
@@ -884,7 +881,7 @@ vector_pos(pgVector *self)
     pgVector *ret = _vector_subtype_new(self);
 
     if (ret) {
-        memcpy(ret->coords, self->coords, sizeof(ret->coords[0]) * ret->dim);
+        memcpy(ret->coords, self->coords, sizeof(double) * VECTOR_MAX_SIZE);
     }
     return (PyObject *)ret;
 }
@@ -904,33 +901,25 @@ vector_nonzero(pgVector *self)
 static PyObject *
 vector_copy(pgVector *self, PyObject *_null)
 {
-    Py_ssize_t i;
     pgVector *ret = _vector_subtype_new(self);
 
     if (!ret) {
         return NULL;
     }
 
-    for (i = 0; i < self->dim; i++) {
-        ret->coords[i] = self->coords[i];
-    }
+    memcpy(ret->coords, self->coords, sizeof(double) * VECTOR_MAX_SIZE);
     return (PyObject *)ret;
 }
 
 static PyObject *
 vector_clamp_magnitude(pgVector *self, PyObject *const *args, Py_ssize_t nargs)
 {
-    Py_ssize_t i;
-    pgVector *ret;
-
-    ret = _vector_subtype_new(self);
+    pgVector *ret = _vector_subtype_new(self);
     if (ret == NULL) {
         return NULL;
     }
 
-    for (i = 0; i < self->dim; ++i) {
-        ret->coords[i] = self->coords[i];
-    }
+    memcpy(ret->coords, self->coords, sizeof(double) * VECTOR_MAX_SIZE);
 
     PyObject *ret_val = vector_clamp_magnitude_ip(ret, args, nargs);
     if (!ret_val) {
@@ -1452,7 +1441,7 @@ vector_normalize(pgVector *self, PyObject *_null)
     if (ret == NULL) {
         return NULL;
     }
-    memcpy(ret->coords, self->coords, sizeof(ret->coords[0]) * ret->dim);
+    memcpy(ret->coords, self->coords, sizeof(double) * VECTOR_MAX_SIZE);
 
     PyObject *tmp = vector_normalize_ip(ret, NULL);
     if (!tmp) {
@@ -1575,7 +1564,6 @@ _vector_move_towards_helper(Py_ssize_t dim, double *origin_coords,
 static PyObject *
 vector_move_towards(pgVector *self, PyObject *args)
 {
-    Py_ssize_t i;
     PyObject *target;
     double target_coords[VECTOR_MAX_SIZE];
     double max_distance;
@@ -1593,10 +1581,7 @@ vector_move_towards(pgVector *self, PyObject *args)
     if (ret == NULL) {
         return NULL;
     }
-
-    for (i = 0; i < self->dim; ++i) {
-        ret->coords[i] = self->coords[i];
-    }
+    memcpy(ret->coords, self->coords, sizeof(double) * VECTOR_MAX_SIZE);
 
     _vector_move_towards_helper(self->dim, ret->coords, target_coords,
                                 max_distance);
@@ -1829,7 +1814,7 @@ vector_reflect_ip(pgVector *self, PyObject *normal)
                                 self->epsilon)) {
         return NULL;
     }
-    memcpy(self->coords, tmp_coords, self->dim * sizeof(tmp_coords[0]));
+    memcpy(self->coords, tmp_coords, sizeof(double) * VECTOR_MAX_SIZE);
     Py_RETURN_NONE;
 }
 
@@ -2138,17 +2123,12 @@ vector_setAttr_swizzle(pgVector *self, PyObject *attr_name, PyObject *val)
     PyObject *attr_unicode;
     Py_ssize_t len = PySequence_Length(attr_name);
     double entry[VECTOR_MAX_SIZE];
-    int entry_was_set[VECTOR_MAX_SIZE];
+    bool entry_was_set[VECTOR_MAX_SIZE] = {0};
     int swizzle_err = SWIZZLE_ERR_NO_ERR;
     Py_ssize_t i;
 
     if (len == 1) {
         return PyObject_GenericSetAttr((PyObject *)self, attr_name, val);
-    }
-
-    /* if swizzling is enabled first try swizzle */
-    for (i = 0; i < self->dim; ++i) {
-        entry_was_set[i] = 0;
     }
 
     /* handle string and unicode uniformly */
@@ -2293,26 +2273,24 @@ static PyObject *
 vector___round__(pgVector *self, PyObject *args)
 {
     Py_ssize_t i, ndigits;
-    PyObject *o_ndigits = NULL;
+    PyObject *o_ndigits = Py_None;
+
+    if (!PyArg_ParseTuple(args, "|O", &o_ndigits)) {
+        return NULL;
+    }
 
     pgVector *ret = _vector_subtype_new(self);
     if (ret == NULL) {
         return NULL;
     }
+    memcpy(ret->coords, self->coords, sizeof(double) * VECTOR_MAX_SIZE);
 
-    if (!PyArg_ParseTuple(args, "|O", &o_ndigits)) {
-        Py_DECREF(ret);
-        return NULL;
-    }
-
-    memcpy(ret->coords, self->coords, sizeof(ret->coords[0]) * ret->dim);
-
-    if (o_ndigits == NULL || o_ndigits == Py_None) {
+    if (o_ndigits == Py_None) {
         for (i = 0; i < ret->dim; ++i) {
             ret->coords[i] = round(ret->coords[i]);
         }
     }
-    else if (RealNumber_Check(o_ndigits)) {
+    else {
         ndigits = PyNumber_AsSsize_t(o_ndigits, NULL);
         if (PyErr_Occurred()) {
             Py_DECREF(ret);
@@ -2322,11 +2300,6 @@ vector___round__(pgVector *self, PyObject *args)
             ret->coords[i] = round(ret->coords[i] * pow(10, (double)ndigits)) /
                              pow(10, (double)ndigits);
         }
-    }
-    else {
-        PyErr_SetString(PyExc_TypeError, "Argument must be an integer");
-        Py_DECREF(ret);
-        return NULL;
     }
 
     return (PyObject *)ret;
@@ -2372,7 +2345,7 @@ _vector2_set(pgVector *self, PyObject *xOrSequence, PyObject *y)
             char *delimiter[3] = {"Vector2(", ", ", ")"};
             Py_ssize_t error_code;
             error_code = _vector_coords_from_string(xOrSequence, delimiter,
-                                                    self->coords, self->dim);
+                                                    self->coords, 2);
             if (error_code == -2) {
                 return -1;
             }
@@ -2639,7 +2612,7 @@ static PyObject *
 vector2_as_polar(pgVector *self, PyObject *_null)
 {
     double r, phi;
-    r = sqrt(_scalar_product(self->coords, self->coords, self->dim));
+    r = sqrt(_scalar_product(self->coords, self->coords, 2));
     phi = RAD2DEG(atan2(self->coords[1], self->coords[0]));
     return Py_BuildValue("(dd)", r, phi);
 }
@@ -2816,7 +2789,7 @@ _vector3_set(pgVector *self, PyObject *xOrSequence, PyObject *y, PyObject *z)
             char *delimiter[4] = {"Vector3(", ", ", ", ", ")"};
             Py_ssize_t error_code;
             error_code = _vector_coords_from_string(xOrSequence, delimiter,
-                                                    self->coords, self->dim);
+                                                    self->coords, 3);
             if (error_code == -2) {
                 return -1;
             }
@@ -3492,13 +3465,13 @@ vector3_angle_to(pgVector *self, PyObject *other)
         return NULL;
     }
 
-    squared_length1 = _scalar_product(self->coords, self->coords, self->dim);
-    squared_length2 = _scalar_product(other_coords, other_coords, self->dim);
+    squared_length1 = _scalar_product(self->coords, self->coords, 3);
+    squared_length2 = _scalar_product(other_coords, other_coords, 3);
     tmp = sqrt(squared_length1 * squared_length2);
     if (tmp == 0) {
         return RAISE(PyExc_ValueError, "angle to zero vector is undefined.");
     }
-    angle = acos(_scalar_product(self->coords, other_coords, self->dim) / tmp);
+    angle = acos(_scalar_product(self->coords, other_coords, 3) / tmp);
     return PyFloat_FromDouble(RAD2DEG(angle));
 }
 
@@ -3506,7 +3479,7 @@ static PyObject *
 vector3_as_spherical(pgVector *self, PyObject *_null)
 {
     double r, theta, phi;
-    r = sqrt(_scalar_product(self->coords, self->coords, self->dim));
+    r = sqrt(_scalar_product(self->coords, self->coords, 3));
     if (r == 0.) {
         return Py_BuildValue("(ddd)", 0., 0., 0.);
     }
