@@ -3,6 +3,7 @@ import sys
 import threading
 from time import perf_counter
 
+import numpy
 import pygame
 
 pygame.init()
@@ -69,8 +70,6 @@ print(f"time taken: {end - start}")
 for pixel, color in zip(pixels, colors):
     surface.set_at(pixel, color)
 pygame.image.save(pygame.transform.scale_by(surface, 10), "comparison.png")
-
-import numpy
 
 threaded_surf = pygame.image.load("out.png")
 compare_surf = pygame.image.load("comparison.png")
