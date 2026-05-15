@@ -836,7 +836,7 @@ pg_PointList_FromArrayDouble(double const *array, int arr_length)
 #endif
 
 #define PRINT_AND_CLEAR_EXCEPTION \
-    if (PyErr_Occurred) {         \
+    if (PyErr_Occurred()) {       \
         PyErr_Print();            \
         PyErr_Clear();            \
     }

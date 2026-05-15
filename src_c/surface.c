@@ -1285,7 +1285,8 @@ surf_mutex_lock(PyObject *self, PyObject *_null)
 {
     SURF_INIT_CHECK(pgSurface_AsSurface(self));
     if (IS_LOCKED((pgSurfaceObject *)self)) {
-        RAISE(pgExc_SDLError, "Cannot lock mutex that is already locked");
+        return RAISE(pgExc_SDLError,
+                     "Cannot lock mutex that is already locked");
     }
 
     LOCK_pgSurfaceObject((pgSurfaceObject *)self);
@@ -1297,7 +1298,7 @@ surf_mutex_unlock(PyObject *self, PyObject *_null)
 {
     SURF_INIT_CHECK(pgSurface_AsSurface(self));
     if (!IS_LOCKED((pgSurfaceObject *)self)) {
-        RAISE(pgExc_SDLError, "Cannot unlock mutex that is not locked");
+        return RAISE(pgExc_SDLError, "Cannot unlock mutex that is not locked");
     }
 
     UNLOCK_pgSurfaceObject((pgSurfaceObject *)self);
