@@ -76,8 +76,9 @@ PG_AUTOIMPORT_CLASSES = {
     # "geometry": ["Circle"],
 }
 
+# These are things in the pygame.* namespace, but we don't want to stub the entire source
 ADDITIONAL_STUBS = [
-    "def print_debug_info(filename: str | None = None) -> None: ...",
+    "def print_debug_info() -> None: ...",
     "def get_debug_info() -> str: ..."
 ]
 

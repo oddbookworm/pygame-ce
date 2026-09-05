@@ -187,24 +187,8 @@ def get_debug_info() -> str:
     return debug_str
 
 
-def print_debug_info(filename: str | None = None) -> None:
-    """Prints debug information for reporting bugs.
-
-    Args:
-        filename: [DEPRECATED] string name of the file to save
-    """
-    import warnings
-
-    if filename is not None:
-        warnings.warn(
-            "filename parameter is deprecated, printing to console. "
-            "To get the output into a file, use get_debug_info() to get the string.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
+def print_debug_info() -> None:
+    """Prints debug information for reporting bugs."""
     debug_str = get_debug_info()
 
     print(debug_str)
-
-    del warnings

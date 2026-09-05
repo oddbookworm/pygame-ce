@@ -17,3 +17,9 @@ So, users will have to say goodbye to their old companion
 `pygame-ce 3.0.0.dev1 (SDL 3.4.0, Python 3.13.3)`
 
 and the `PYGAME_HIDE_SUPPORT_PROMPT` environment variable.
+
+
+## Miscellaneous Function Changes
+
+### print_debug_info
+Removed the `filename` argument and added `get_debug_info` to get the raw string.
