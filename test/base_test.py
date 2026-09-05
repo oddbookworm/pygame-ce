@@ -640,13 +640,6 @@ class VersionGitMetadataTest(unittest.TestCase):
             self.assertTrue(hasattr(pygame, attr))
             self.assertEqual(getattr(pygame, attr), getattr(pygame.version, attr))
 
-    # TODO: enable this test after #3898 merges
-    # def test_print_debug_info_includes_git_metadata(self):
-    #     output = pygame.get_debug_info()
-    #     self.assertIn("Commit Hash:", output)
-    #     self.assertIn("Branch Name:", output)
-    #     self.assertIn("Built on CI:", output)
-
 
 if __name__ == "__main__":
     unittest.main()
